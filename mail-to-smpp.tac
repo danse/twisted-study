@@ -36,7 +36,7 @@ def send_mt(headers={}):
         source_addr='mobileway',
         dest_addr_ton=AddrTon.INTERNATIONAL,
         dest_addr_npi=AddrNpi.ISDN,
-        destination_addr=headers['To'],
+        destination_addr='12345',
         esm_class=EsmClass(EsmClassMode.DEFAULT, EsmClassType.DEFAULT),
         protocol_id=0,
         priority_flag=PriorityFlag.LEVEL_0,
@@ -45,40 +45,37 @@ def send_mt(headers={}):
         data_coding=DataCoding(DataCodingScheme.GSM_MESSAGE_CLASS, DataCodingGsmMsg(DataCodingGsmMsgCoding.DEFAULT_ALPHABET, DataCodingGsmMsgClass.CLASS_2)),
         short_message='HELLO',
     )
-    return smpp_client_service.client.smpp.sendDataRequest(pdu)ck(
+    return smpp_client_service.client.smpp.sendDataRequest(pdu)
 
 ######################################################################
 
 from twisted.mail import smtp
+from smtplib import CRLF
+from email import message_from_string
 
 class MessageProcessor(object):
     implements(smtp.IMessage)
 
     def __init__(self):
-        self.headers = {}
-        self.data    = []
-        self.data_mode = False
+        self.buffer  = []
 
     def lineReceived(self, line):
-        if line and not self.data_mode:
-            k, v = line.split(':', 1)
-            self.headers[k] = v.lstrip(' ')
-        else:
-            if self.data_mode:
-                self.data.append(line)
-            else:
-                self.data_mode = True
+        self.buffer.append(line)
 
     def eomReceived(self):
-        self.headers['DATA'] = '\n'.join(self.data)
-        return send_mt(self.headers).addCallback(self.responseReceived)
+        mail_string = CRLF.join(self.buffer)
+        mail_message = message_from_string(mail_string)
+        mail_message.add_header('DATA', mail_message.get_payload())
+        headers = dict(mail_message.items())
+        print headers
+        return send_mt(headers).addCallback(self.responseReceived)
 
     def connectionLost(self):
         pass
 
     def responseReceived(self, data):
-        print data
-        return defer.fail(None)
+        print str(data)
+        return defer.succeed(None)
 
 class MTDelivery(object):
     implements(smtp.IMessageDelivery)
